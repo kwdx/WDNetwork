@@ -7,8 +7,13 @@
 //
 
 #import "WDNetwork.h"
-#import <AFHTTPSessionManager.h>
-#import "AFNetworkActivityIndicatorManager.h"
+#if __has_include(<AFNetworking/AFNetworking.h>)
+#import <AFNetworking/AFNetworking.h>
+#import <AFNetworking/AFNetworkActivityIndicatorManager.h>
+#else
+#import "AFNetworking/AFNetworking.h"
+#import "AFNetworking/AFNetworkActivityIndicatorManager.h"
+#endif
 #import <objc/runtime.h>
 #import <pthread.h>
 
