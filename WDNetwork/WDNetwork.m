@@ -42,6 +42,8 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
 @property (nonatomic, strong) NSMutableDictionary *headers;
 @property (nonatomic, strong) NSMutableDictionary *params;
 
+@property (nonatomic, assign) BOOL inBody;
+
 @end
 
 @implementation WDNetworkConfig
@@ -97,6 +99,8 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
                     requestuploadProgress:(WDNetworkProgressBlock) uploadProgressBlock
                          downloadProgress:(WDNetworkProgressBlock) downloadProgressBlock
                         completionHandler:(void (^)(NSURLResponse *response, id _Nullable responseObject,  NSError * _Nullable error))completionHandler;
+
+- (id)task:(WDNetworkTask *)task processRequestObject:(id)requestObject;
 
 - (id)task:(WDNetworkTask *)task processResponseObject:(id)responseObject;
 
@@ -217,36 +221,55 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
 #pragma mark - Private
 
 - (void)_resume {
+    WDNetworkConfig *config = self.config;
+    
     AFHTTPRequestSerializer *requestSerializer;
-    if (self.config.requestSerializer == WDNetworkRequestSerializerJSON) {
+    if (config.requestSerializer == WDNetworkRequestSerializerJSON) {
         requestSerializer = [AFJSONRequestSerializer serializer];
     } else {
         requestSerializer = [AFHTTPRequestSerializer serializer];
     }
     
+    NSDictionary *params = self.config.params;
+    if (self.delegate) {
+        params = [self.delegate task:self processRequestObject:config.params];
+    }
+    
     NSError *error;
-    NSMutableURLRequest *request = [requestSerializer requestWithMethod:self.method URLString:self.url parameters:nil error:&error];
+    NSMutableURLRequest *request = [requestSerializer requestWithMethod:self.method URLString:self.url parameters:(config.inBody ? nil : params) error:&error];
+    
     if (error) {
-        
+        _wd_dispatch_async_on_main_queue(^{
+            if (self.failureBlock) {
+                self.failureBlock(error);
+            }
+        });
         return;
     }
     
     request.timeoutInterval = self.config.timeoutInterval;
     request.HTTPShouldHandleCookies = self.config.shouldUseCookies;
     
-    for (NSString *key in self.config.headers.allKeys) {
-        [request setValue:self.config.headers[key] forHTTPHeaderField:key];
+    if (self.config.inBody) {
+        if ([params isKindOfClass:NSData.class]) {
+            request.HTTPBody = (NSData *)params;
+        } else if ([params isKindOfClass:NSInputStream.class]) {
+            request.HTTPBodyStream = (NSInputStream *)params;
+        } else {
+            request.HTTPBody = [NSJSONSerialization dataWithJSONObject:params options:NSJSONWritingPrettyPrinted error:&error];
+        }
     }
     
-    if (self.config.userAgent) {
-        [request setValue:self.config.userAgent forHTTPHeaderField:@"User-Agent"];
-    }
-    
-    self.request = [requestSerializer requestBySerializingRequest:request withParameters:self.config.params error:&error];
     if (error) {
-        
+        _wd_dispatch_async_on_main_queue(^{
+            if (self.failureBlock) {
+                self.failureBlock(error);
+            }
+        });
         return;
     }
+    
+    self.request = request;
     
     __weak typeof(self) weak_self = self;
     self.dataTask = [self.delegate dataTaskForTask:self requestuploadProgress:^(NSProgress * _Nonnull progress) {
@@ -311,7 +334,8 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
 
 @property (nonatomic, strong) WDNetworkConfig *config;
 @property (nonatomic, strong) dispatch_queue_t completionQueue;
-@property (nonatomic, copy) WDNetworkProcessResponseObjectBlock processBlock;
+@property (nonatomic, copy) WDNetworkProcessRequestObjectBlock requestBlock;
+@property (nonatomic, copy) WDNetworkProcessResponseObjectBlock responseBlock;
 
 @end
 
@@ -395,9 +419,16 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
     };
 }
 
+- (WDNetwork * _Nonnull (^)(WDNetworkProcessRequestObjectBlock _Nonnull))processRequestObject {
+    return ^id(WDNetworkProcessRequestObjectBlock requestBlock) {
+        self.requestBlock = requestBlock;
+        return self;
+    };
+}
+
 - (WDNetwork * _Nonnull (^)(WDNetworkProcessResponseObjectBlock _Nonnull))processResponseObject {
-    return ^id(WDNetworkProcessResponseObjectBlock processBlock) {
-        self.processBlock = processBlock;
+    return ^id(WDNetworkProcessResponseObjectBlock responseBlock) {
+        self.responseBlock = responseBlock;
         return self;
     };
 }
@@ -451,9 +482,16 @@ NSString * const WDNetworkReachabilityNotificationStatusKey = @"WDNetworkReachab
     return dataTask;
 }
 
+- (id)task:(WDNetworkTask *)task processRequestObject:(id)requestObject {
+    if (self.requestBlock) {
+        return self.requestBlock(task.url.copy, requestObject);
+    }
+    return requestObject;
+}
+
 - (id)task:(WDNetworkTask *)task processResponseObject:(id)responseObject {
-    if (self.processBlock) {
-        return self.processBlock(task.request.copy, responseObject);
+    if (self.responseBlock) {
+        return self.responseBlock(task.request.copy, responseObject);
     }
     return responseObject;
 }

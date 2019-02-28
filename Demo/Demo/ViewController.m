@@ -22,8 +22,18 @@
     .addHeaders(@{@"os":@"iOS"})
     .addParams(@{@"id":@"1"})
     .processResponseObject((id)^(NSURLRequest *request, id responseObject) {
-        NSLog(@"%@", request.URL);
+        if ([responseObject isKindOfClass:NSDictionary.class]) {
+            NSMutableDictionary *muDict = [NSMutableDictionary dictionaryWithDictionary:responseObject];
+            [muDict setObject:request.URL forKey:@"URL"];
+            return (id)muDict;
+        }
         return responseObject;
+    }).processRequestObject((id)^(NSString *url, id params) {
+        NSMutableDictionary *muParams = [NSMutableDictionary dictionaryWithDictionary:params];
+        if ([muParams.allKeys containsObject:@"name"]) {
+            muParams[@"name"] = [muParams[@"name"] stringByAppendingString:@"----"];
+        }
+        return muParams;
     });
 }
 

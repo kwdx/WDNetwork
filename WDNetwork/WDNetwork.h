@@ -33,6 +33,7 @@ typedef void(^WDNetworkDidReceiveResponseBlock)(NSHTTPURLResponse *httpURLRespon
 typedef void(^WDNetworkProgressBlock)(NSProgress *progress);
 typedef void(^WDNetworkResponseSuccessBlock)(id _Nullable responseObj);
 typedef void(^WDNetworkResponseFailureBlock)(NSError * _Nonnull error);
+typedef id(^WDNetworkProcessRequestObjectBlock)(NSString *url, id _Nullable requestObj);
 typedef id(^WDNetworkProcessResponseObjectBlock)(NSURLRequest *request, id _Nullable responseObj);
 
 @interface WDNetworkTask : NSObject
@@ -49,8 +50,6 @@ typedef id(^WDNetworkProcessResponseObjectBlock)(NSURLRequest *request, id _Null
 - (WDNetworkTask *(^)(NSDictionary *))headers;
 - (WDNetworkTask *(^)(NSDictionary *))params;
 
-//- (WDNetworkTask *(^)(WDNetworkProgressBlock))uploadProgress;
-//- (WDNetworkTask *(^)(WDNetworkProgressBlock))downloadProgress;
 - (WDNetworkTask *(^)(WDNetworkResponseSuccessBlock))success;
 - (WDNetworkTask *(^)(WDNetworkResponseFailureBlock))failure;
 
@@ -75,6 +74,7 @@ typedef id(^WDNetworkProcessResponseObjectBlock)(NSURLRequest *request, id _Null
 - (WDNetwork *(^)(NSDictionary *))addParams;            ///< 添加默认请求参数
 - (WDNetwork *(^)(NSArray *))removeParams;              ///< 移除默认请求参数
 
+- (WDNetwork *(^)(WDNetworkProcessRequestObjectBlock))processRequestObject;
 - (WDNetwork *(^)(WDNetworkProcessResponseObjectBlock))processResponseObject;
 
 - (WDNetworkTask * _Nullable (^)(NSString *))GET;
